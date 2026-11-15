@@ -769,10 +769,7 @@ elif page == "Flood Detection":
 
                         model_path = MODEL_PATHS[name]
 
-                        if not os.path.exists(model_path):
-                            raise FileNotFoundError(
-                                f"Model file not found: {model_path}"
-                            )
+                        ensure_asset(model_path)
 
                         model = load_model(model_path)
 
