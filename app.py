@@ -2243,11 +2243,11 @@ elif page == "Actual vs Predicted":
             X_test, Y_test, valid_test = load_comparison_data()
 
         st.success(
-            f"Loaded {len(X_test)} test images successfully."
+            f"Loaded {len(X_test)} test patches (256x256 pixels) successfully."
         )
 
         image_index = st.number_input(
-            "Select test image index",
+            "Select test patch index",
             min_value=0,
             max_value=len(X_test) - 1,
             value=0,
@@ -2271,6 +2271,10 @@ elif page == "Actual vs Predicted":
 
         st.divider()
         st.subheader("Satellite Image")
+        st.caption(
+            "Black areas are no-data or unlabelled pixels. They are set to "
+            "zero in preprocessing and excluded from the evaluation."
+        )
 
         col1, col2 = st.columns(2)
 
@@ -2438,7 +2442,42 @@ elif page == "Actual vs Predicted":
         # =============================================
 
         st.divider()
-        st.subheader("Test Dataset Evaluation Downloads")
+        st.subheader("Selected Test Patch Report")
+        st.caption(
+            "These two downloads cover only the patch selected above "
+            f"(index {image_index}). For overall test-set results, use the "
+            "full test-set CSV below."
+        )
+
+        # Overall results on the whole test set (computed in the training
+        # notebook and stored in the comparison file).
+        try:
+            ensure_asset(METRICS_PATH)
+            full_df = pd.read_csv(METRICS_PATH)
+            full_cols = [
+                "Accuracy", "Precision", "Recall",
+                "F1_Score", "Dice", "IoU"
+            ]
+            if full_df[full_cols].max().max() <= 1:
+                full_df[full_cols] = full_df[full_cols] * 100
+            full_df = full_df.rename(columns={
+                "Accuracy": "Accuracy (%)",
+                "Precision": "Precision (%)",
+                "Recall": "Recall (%)",
+                "F1_Score": "F1 Score (%)",
+                "Dice": "Dice (%)",
+                "IoU": "IoU (%)"
+            }).round(2)
+            st.download_button(
+                label="Download Full Test-Set Metrics CSV "
+                      "(360 patches, 90 images)",
+                data=full_df.to_csv(index=False).encode("utf-8"),
+                file_name="FloodVision_AI_Full_TestSet_Metrics.csv",
+                mime="text/csv",
+                use_container_width=True
+            )
+        except Exception:
+            st.info("Full test-set metrics file is not available.")
 
         report_df = comparison_df.copy()
         report_df.insert(
@@ -2453,9 +2492,11 @@ elif page == "Actual vs Predicted":
 
         with col1:
             st.download_button(
-                label="Download Test Evaluation CSV",
+                label="Download Selected-Patch CSV",
                 data=csv_data,
-                file_name="FloodVision_AI_Test_Dataset_Evaluation.csv",
+                file_name=(
+                    f"FloodVision_AI_Selected_Patch_{image_index}.csv"
+                ),
                 mime="text/csv",
                 use_container_width=True
             )
@@ -2812,9 +2853,9 @@ elif page == "Actual vs Predicted":
 
         with col2:
             st.download_button(
-                label="Download Test Evaluation PDF",
+                label="Download Selected-Patch PDF",
                 data=pdf_buffer.getvalue(),
-                file_name="FloodVision_AI_Test_Dataset_Evaluation.pdf",
+                file_name=f"FloodVision_AI_Selected_Patch_{image_index}.pdf",
                 mime="application/pdf",
                 use_container_width=True
             )
