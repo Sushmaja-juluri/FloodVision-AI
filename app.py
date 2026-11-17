@@ -1015,35 +1015,50 @@ elif page == "Flood Detection":
                 y=0.94
             )
 
-            summary = (
-                f"Uploaded Image: {outcome_name}\n\n"
+            import textwrap
+
+            details = (
+                f"Uploaded Image: {outcome_name}\n"
                 f"Image Dimensions: {outcome_width} x "
-                f"{outcome_height} pixels\n\n"
-                f"Input Bands: Sentinel-1 VV and VH\n\n"
-                f"Models Executed: {len(outcome_predictions)}\n\n"
-                f"Prediction Threshold: {THRESHOLD}\n\n"
+                f"{outcome_height} pixels\n"
+                f"Input Bands: Sentinel-1 VV and VH\n"
+                f"Models Executed: {len(outcome_predictions)}\n"
+                f"Prediction Threshold: {THRESHOLD}\n"
                 f"Coordinate Reference System: "
-                f"{st.session_state.get('geo_crs') or 'Unavailable'}\n\n"
+                f"{st.session_state.get('geo_crs') or 'Unavailable'}\n"
                 f"Report Generated: "
-                f"{datetime.now().strftime('%d-%m-%Y %H:%M')}\n\n"
+                f"{datetime.now().strftime('%d-%m-%Y %H:%M')}"
+            )
+
+            ax.text(
+                0.06, 0.86,
+                details,
+                fontsize=12,
+                va="top",
+                linespacing=1.9,
+                transform=ax.transAxes
+            )
+
+            disclaimer = textwrap.fill(
                 "This report summarizes AI-based flood segmentation "
                 "predictions for the uploaded satellite image. It presents "
                 "the estimated flood coverage, predicted flood pixels, and "
                 "estimated flooded area for each model. These results do "
-                "not represent ground-truth accuracy measurements."
+                "not represent ground-truth accuracy measurements.",
+                width=105
             )
 
             ax.text(
-                0.08, 0.80,
-                summary,
-                fontsize=12,
+                0.06, 0.47,
+                disclaimer,
+                fontsize=10.5,
                 va="top",
-                linespacing=1.8,
+                linespacing=1.6,
                 transform=ax.transAxes
             )
 
             ax.text(
-                0.08, 0.29,
+                0.06, 0.31,
                 "FLOOD DETECTION RESULTS",
                 fontsize=14,
                 fontweight="bold",
@@ -1055,7 +1070,7 @@ elif page == "Flood Detection":
                 colLabels=outcome_df.columns,
                 cellLoc="center",
                 loc="center",
-                bbox=[0.05, 0.08, 0.90, 0.18]
+                bbox=[0.06, 0.06, 0.88, 0.20]
             )
 
             table.auto_set_font_size(False)
