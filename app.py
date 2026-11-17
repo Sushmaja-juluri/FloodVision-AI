@@ -1018,7 +1018,7 @@ elif page == "Flood Detection":
             import textwrap
 
             details = (
-                f"Uploaded Image: {outcome_name}\n"
+                f"Uploaded Image: {textwrap.shorten(str(outcome_name), width=70, placeholder='...')}\n"
                 f"Image Dimensions: {outcome_width} x "
                 f"{outcome_height} pixels\n"
                 f"Input Bands: Sentinel-1 VV and VH\n"
