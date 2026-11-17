@@ -24,6 +24,14 @@ RESULTS_DIR = os.path.join(PROJECT_DIR, "results")
 PATCH_SIZE = 256
 THRESHOLD = 0.5
 
+# Severity zones: probability bands (name, lower, upper, RGBA for map layer)
+SEVERITY_ZONES = [
+    ("Low",    0.30, 0.50, [255, 215, 0, 170]),
+    ("Medium", 0.50, 0.70, [255, 140, 0, 190]),
+    ("High",   0.70, 1.0001, [200, 0, 0, 215]),
+]
+SEVERITY_HEX = {"Low": "#FFD700", "Medium": "#FF8C00", "High": "#C80000"}
+
 VV_MIN = -23.85825157
 VV_MAX = -2.39960358
 VH_MIN = -34.16553364
@@ -425,6 +433,45 @@ def normalize_image(image):
 # =====================================================
 # 7. FLOOD PREDICTION
 # =====================================================
+
+def classify_severity(probability):
+    """Map flood probability to zones: 0 = none, 1 = Low, 2 = Medium, 3 = High."""
+    zones = np.zeros(probability.shape, dtype=np.uint8)
+    for level, (_, low, high, _) in enumerate(SEVERITY_ZONES, start=1):
+        zones[(probability >= low) & (probability < high)] = level
+    return zones
+
+
+def severity_rgb(zones):
+    """Colour image of the severity zones for plotting."""
+    palette = np.array(
+        [[16, 31, 50]]
+        + [
+            [int(SEVERITY_HEX[name][i:i + 2], 16) for i in (1, 3, 5)]
+            for name, _, _, _ in SEVERITY_ZONES
+        ],
+        dtype=np.uint8
+    )
+    return palette[zones]
+
+
+def severity_summary(probability, transform, crs):
+    """Return the zone map and a per-zone table (pixels, % of image, km2)."""
+    zones = classify_severity(probability)
+    total = zones.size
+    rows = []
+    for level, (name, low, high, _) in enumerate(SEVERITY_ZONES, start=1):
+        zone_mask = (zones == level).astype(np.uint8)
+        pixels, area = calculate_area(zone_mask, transform, crs)
+        rows.append({
+            "Zone": name,
+            "Probability Range": f"{low:.2f} - {min(high, 1.0):.2f}",
+            "Pixels": pixels,
+            "Coverage (%)": round(pixels / total * 100, 2),
+            "Area (km²)": round(area, 4) if area is not None else "Unavailable"
+        })
+    return zones, rows
+
 
 def predict_flood(model, image):
     height, width, channels = image.shape
@@ -861,6 +908,50 @@ elif page == "Flood Detection":
                     min(result["coverage"] / 100, 1.0)
                 )
 
+        # ---------------- FLOOD SEVERITY ZONES ----------------
+        st.divider()
+        section("FLOOD SEVERITY ZONES")
+        st.caption(
+            "Severity zones are derived from the model's flood probability: "
+            "Low (0.30-0.50, possible flooding), Medium (0.50-0.70) and "
+            "High (0.70-1.00, very likely flooded)."
+        )
+        st.markdown(
+            "<span style='color:#FFD700'>&#9632;</span> Low &nbsp; "
+            "<span style='color:#FF8C00'>&#9632;</span> Medium &nbsp; "
+            "<span style='color:#C80000'>&#9632;</span> High",
+            unsafe_allow_html=True
+        )
+
+        sev_transform = st.session_state.get("geo_transform")
+        sev_crs = st.session_state.get("geo_crs")
+        sev_cols = st.columns(len(predictions))
+
+        for col, (name, result) in zip(sev_cols, predictions.items()):
+
+            sev_zones, sev_rows = severity_summary(
+                result["probability"], sev_transform, sev_crs
+            )
+
+            with col:
+                st.markdown(
+                    f'<div class="info-card"><h3>{name}</h3></div>',
+                    unsafe_allow_html=True
+                )
+
+                sev_fig, sev_ax = plt.subplots(figsize=(4, 4))
+                sev_ax.imshow(severity_rgb(sev_zones))
+                sev_ax.axis("off")
+                sev_fig.patch.set_facecolor("#101f32")
+                st.pyplot(sev_fig, use_container_width=True)
+                plt.close(sev_fig)
+
+                st.dataframe(
+                    pd.DataFrame(sev_rows),
+                    hide_index=True,
+                    use_container_width=True
+                )
+
 
 # =====================================================
 
@@ -1062,6 +1153,59 @@ elif page == "Flood Detection":
             pdf.savefig(fig, bbox_inches="tight")
             plt.close(fig)
 
+            # -------------------------------------
+            # PAGE 5: FLOOD SEVERITY ZONES
+            # -------------------------------------
+
+            fig, axes = plt.subplots(
+                1, model_count,
+                figsize=(5 * model_count, 6)
+            )
+
+            if model_count == 1:
+                axes = [axes]
+
+            fig.suptitle(
+                "Flood Severity Zones (Low / Medium / High)",
+                fontsize=17,
+                fontweight="bold"
+            )
+
+            for ax, (model_name, result) in zip(
+                axes, outcome_predictions.items()
+            ):
+                zones_img, zone_rows = severity_summary(
+                    result["probability"],
+                    st.session_state.get("geo_transform"),
+                    st.session_state.get("geo_crs")
+                )
+
+                ax.imshow(severity_rgb(zones_img))
+                ax.set_title(model_name, fontsize=12)
+                ax.axis("off")
+
+                ax.text(
+                    0.5, -0.04,
+                    "\n".join(
+                        f"{r['Zone']}: {r['Coverage (%)']:.2f}% | "
+                        f"{r['Area (km²)']} km²"
+                        for r in zone_rows
+                    ),
+                    transform=ax.transAxes,
+                    ha="center", va="top", fontsize=9
+                )
+
+            fig.text(
+                0.5, 0.02,
+                "Yellow = Low (0.30-0.50)    Orange = Medium (0.50-0.70)    "
+                "Red = High (0.70-1.00)",
+                ha="center", fontsize=10
+            )
+
+            fig.tight_layout(rect=[0, 0.05, 1, 0.92])
+            pdf.savefig(fig, bbox_inches="tight")
+            plt.close(fig)
+
         outcome_buffer.seek(0)
 
         st.download_button(
@@ -1247,6 +1391,32 @@ elif page == "Geographical Flood Map":
 
             flood_layer.add_to(flood_map)
 
+            # Severity zones (Low / Medium / High) as an optional layer.
+            severity_map = classify_severity(result["probability"])
+            severity_rgba = np.zeros((height, width, 4), dtype=np.uint8)
+
+            for level, (_, _, _, rgba) in enumerate(
+                SEVERITY_ZONES, start=1
+            ):
+                severity_rgba[severity_map == level] = rgba
+
+            severity_layer = folium.FeatureGroup(
+                name=f"{selected_model} Severity Zones",
+                show=False
+            )
+
+            ImageOverlay(
+                image=severity_rgba,
+                bounds=image_bounds,
+                opacity=1.0,
+                name="Flood Severity Zones",
+                interactive=False,
+                cross_origin=False,
+                zindex=3
+            ).add_to(severity_layer)
+
+            severity_layer.add_to(flood_map)
+
             # Mark the approximate center of the image footprint.
             folium.Marker(
                 [center_lat, center_lon],
@@ -1288,6 +1458,20 @@ elif page == "Geographical Flood Map":
             m3.metric(
                 "Predicted Flood Pixels",
                 f"{result['pixels']:,}"
+            )
+
+            st.subheader("Severity Zone Summary")
+            _, map_sev_rows = severity_summary(
+                result["probability"], transform, crs
+            )
+            st.dataframe(
+                pd.DataFrame(map_sev_rows),
+                hide_index=True,
+                use_container_width=True
+            )
+            st.caption(
+                "Turn on the 'Severity Zones' layer in the map's layer control "
+                "(yellow = Low, orange = Medium, red = High)."
             )
 
             st.info(
