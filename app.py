@@ -638,13 +638,13 @@ if page == "Dashboard":
         metric_card("Deep Learning Models", "03", "Segmentation architectures")
 
     with c2:
-        metric_card("Training Images", "1,008", "Training dataset")
+        metric_card("Training Patches", "1,008", "256x256 patches from 252 images")
 
     with c3:
-        metric_card("Validation Images", "356", "Validation dataset")
+        metric_card("Validation Patches", "356", "256x256 patches from 89 images")
 
     with c4:
-        metric_card("Test Images", "360", "Testing dataset")
+        metric_card("Test Patches", "360", "256x256 patches from 90 images")
 
     st.write("")
     section("BEST PERFORMING ARCHITECTURE")
@@ -947,7 +947,9 @@ elif page == "Flood Detection":
                 plt.close(sev_fig)
 
                 st.dataframe(
-                    pd.DataFrame(sev_rows),
+                    pd.DataFrame(sev_rows).drop(
+                        columns=["Probability Range"]
+                    ),
                     hide_index=True,
                     use_container_width=True
                 )
@@ -1646,14 +1648,35 @@ elif page == "Model Comparison":
 
         chart_df = df.set_index("Model")[[metric]] * 100
 
-        st.bar_chart(
-            chart_df,
-            color="#22B8E6",
-            y_label="Score (%)"
+        values = chart_df[metric].astype(float)
+        axis_low = max(0.0, np.floor(values.min() / 5) * 5 - 5)
+        axis_high = min(100.0, np.ceil(values.max() / 5) * 5 + 5)
+
+        cmp_fig, cmp_ax = plt.subplots(figsize=(10, 4.5))
+        cmp_bars = cmp_ax.bar(
+            values.index, values.values, color="#22B8E6"
         )
+        cmp_ax.bar_label(
+            cmp_bars,
+            labels=[f"{v:.2f}%" for v in values.values],
+            padding=4,
+            color="white"
+        )
+        cmp_ax.set_ylim(axis_low, axis_high)
+        cmp_ax.set_ylabel("Score (%)", color="white")
+        cmp_ax.tick_params(colors="white")
+        cmp_ax.grid(axis="y", alpha=0.25)
+        for spine in cmp_ax.spines.values():
+            spine.set_color("#2a3b52")
+        cmp_fig.patch.set_facecolor("#101f32")
+        cmp_ax.set_facecolor("#101f32")
+        st.pyplot(cmp_fig, use_container_width=True)
+        plt.close(cmp_fig)
 
         st.caption(
-            "All metrics are based on the saved final evaluation results."
+            "All metrics are based on the saved final evaluation results. "
+            f"The y-axis starts at {axis_low:.0f}% so that small "
+            "differences between models are visible."
         )
 
     else:
@@ -2092,13 +2115,13 @@ elif page == "About Project":
     c1, c2, c3 = st.columns(3)
 
     with c1:
-        metric_card("Training Images", "1,008", "Training split")
+        metric_card("Training Patches", "1,008", "From 252 images (256x256)")
 
     with c2:
-        metric_card("Validation Images", "356", "Validation split")
+        metric_card("Validation Patches", "356", "From 89 images (256x256)")
 
     with c3:
-        metric_card("Testing Images", "360", "Testing split")
+        metric_card("Testing Patches", "360", "From 90 images (256x256)")
 
     st.markdown("""
     **Dataset name:** Sen1Floods11
